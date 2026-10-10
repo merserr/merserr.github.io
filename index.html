@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Anlage DB</title>
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Anlage">
+    
+    <link rel="apple-touch-icon" href="icon.png">
+    <link rel="icon" type="image/png" href="icon.png">
+    <link rel="manifest" href="manifest.json">
+
+    <style>
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #dff6f9;
+            margin: 0;
+            padding: 12px 6px;
+			color: #000; /* Более глубокий черный цвет текста */
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: #ffd;
+            padding: 10px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+
+        h1 { margin-top: 0; color: #1c1c1e; font-size: 18px; margin-bottom: 10px; }
+
+        .button-group {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .btn-action {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            color: white;
+            text-align: center;
+        }
+
+        .btn-import { background: #34c759; }
+        .btn-import:active { background: #2fb350; }
+
+        .btn-search { background: #007aff; }
+        .btn-search:active { background: #0056b3; }
+
+        .search-container {
+            display: none;
+            margin-bottom: 10px;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 10px;
+            font-size: 14px;
+            font-weight: 600; /* Жирный текст при вводе в поиск */
+			border: 1px solid #007aff;
+            border-radius: 8px;
+            outline: none;
+            background: #fff;
+        }
+
+        .filter-section select {
+            width: 100%;
+            padding: 10px;
+            font-size: 14px;
+			font-weight: 600; /* Жирный текст в фильтре */
+            border: 1px solid #d1d1d6;
+            border-radius: 8px;
+            background-color: #fff;
+            outline: none;
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22293%22%20height%3D%22293%22%3E%3Cpath%20d%3D%22M201.4%2092.1L146.5%20147%2091.6%2092.1c-4.7-4.7-12.3-4.7-17%200-4.7%204.7-4.7%2012.3%200%2017l63.4%2063.4c4.7%204.7%2012.3%204.7%2017%200l63.4-63.4c4.7-4.7%204.7-12.3%200-17-4.7-4.8-12.3-4.8-17%200z%22%20fill%3D%22%23666%22%2F%3E%3C%2Fsvg%3E");
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            background-size: 10px;
+            margin-bottom: 10px;
+        }
+
+        /* Настройки таблицы для подгонки 5 колонок под ширину экрана */
+        .table-wrapper { 
+            width: 100%; 
+            overflow: hidden; 
+        }
+
+        table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            table-layout: fixed; /* Позволяет колонкам сжиматься строго по процентам */
+        }
+
+        th, td { 
+            padding: 6px 3px; 
+            text-align: left; 
+            border-bottom: 1px solid #d7d7dc; 
+            font-size: 11px; 
+            font-weight: 600; /* Сделали весь текст в ячейках полужирным */
+			word-wrap: break-word;
+            overflow-wrap: break-word;
+            hyphens: auto;
+			color: #111;
+        }
+
+        th { 
+            background-color: #007aff; 
+            color: white; 
+            font-weight: 700; /* Сделали заголовки таблицы жирнее */
+        }
+
+        th:first-child { border-top-left-radius: 6px; }
+        th:last-child { border-top-right-radius: 6px; }
+
+        /* Пропорциональное распределение ширины для 5 колонок */
+        .col-num { width: 6%; }
+        .col-sich { width: 18%; }
+        .col-sys { width: 21%; }
+        .col-name { width: 35%; }
+        .col-ort { width: 20%; }
+
+        tr.clickable-row:active { background-color: #e5e5ea; }
+        .no-data { text-align: center; color: #8e8e93; padding: 20px 0; font-style: italic; }
+
+        /* Модальное окно деталей */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.4);
+            justify-content: center;
+            align-items: flex-end;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: #ffd;
+            width: 100%;
+            max-width: 800px;
+            max-height: 85vh;
+            overflow-y: auto;
+            padding: 20px;
+            border-top-left-radius: 16px;
+            border-top-right-radius: 16px;
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+            animation: slideUp 0.2s ease-out;
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(100%); }
+            to { transform: translateY(0); }
+        }
+
+        .modal h2 { margin-top: 0; font-size: 18px; border-bottom: 1px solid #e5e5ea; padding-bottom: 8px; color: #007aff; }
+        .modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        @media (max-width: 480px) { .modal-grid { grid-template-columns: 1fr; } }
+        .info-group { margin-bottom: 6px; }
+        .info-group label { display: block; font-size: 11px; color: #8e8e93; text-transform: uppercase; font-weight: 700; }
+        .info-group span { font-size: 14px; font-weight: 600; color: #1c1c1e; word-break: break-word; }
+
+        .btn-close {
+            width: 100%;
+            padding: 12px;
+            margin-top: 15px;
+            background: #007aff;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Anlage BFG-IAR</h1>
+
+    <div class="button-group">
+        <button class="btn-action btn-import" onclick="document.getElementById('file-input').click()">
+            📥 Import
+        </button>
+        <button class="btn-action btn-search" id="toggle-search-btn">
+            🔍 Suchen
+        </button>
+    </div>
+
+    <input type="file" id="file-input" accept=".txt,.csv" style="display:none">
+
+    <div class="search-container" id="search-container">
+        <input type="text" id="search-input" class="search-input" placeholder="Suche nach Sicherung, Systemnr., Name...">
+    </div>
+
+    <div class="filter-section">
+        <select id="ort-select">
+            <option value="">-- alle Orte --</option>
+        </select>
+    </div>
+
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th class="col-num">№</th>
+                    <th class="col-sich">Sicherung</th>
+                    <th class="col-sys">Systemnr.</th>
+                    <th class="col-name">Name</th>
+                    <th class="col-ort">Ort</th>
+                </tr>
+            </thead>
+            <tbody id="equipment-tbody">
+                <tr><td colspan="5" class="no-data">Laden Sie die Datei</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div id="item-modal" class="modal">
+    <div class="modal-content">
+        <h2 id="modal-title">Detailliert</h2>
+        <div class="modal-grid" id="modal-details"></div>
+        <button class="btn-close" onclick="closeModal()">Schließen</button>
+    </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
