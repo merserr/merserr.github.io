@@ -3,8 +3,9 @@ const DB_VERSION = 1;
 const STORE_NAME = 'items';
 
 let db = null;
+let currentEditingId = null;
+let originalHeaders = [];
 
-// 1. Инициализация IndexedDB
 function initDB() {
     return new Promise((resolve, reject) => {
         const request = indexedDB.open(DB_NAME, DB_VERSION);
@@ -26,13 +27,12 @@ function initDB() {
     });
 }
 
-// 2. Парсер текста (\t или ,)
 function parseTextData(text) {
     const lines = text.trim().split(/\r?\n/);
     if (lines.length < 2) return [];
 
     const delimiter = lines[0].includes('\t') ? '\t' : ',';
-    const headers = lines[0].split(delimiter).map(h => h.trim().toLowerCase());
+    originalHeaders = lines[0].split(delimiter).map(h => h.trim().toLowerCase());
 
     const result = [];
 
@@ -43,7 +43,7 @@ function parseTextData(text) {
         const values = line.split(delimiter);
         const obj = {};
 
-        headers.forEach((header, index) => {
+        originalHeaders.forEach((header, index) => {
             obj[header] = values[index] ? values[index].trim() : '';
         });
 
@@ -53,7 +53,6 @@ function parseTextData(text) {
     return result;
 }
 
-// 3. Загрузка мест (ort) в выпадающий список
 async function loadOrtCategories() {
     const tx = db.transaction(STORE_NAME, 'readonly');
     const store = tx.objectStore(STORE_NAME);
@@ -64,7 +63,7 @@ async function loadOrtCategories() {
         const orts = [...new Set(items.map(i => i.ort).filter(Boolean))].sort();
 
         const select = document.getElementById('ort-select');
-        select.innerHTML = '<option value="">-- alle Orte --</option>';
+        select.innerHTML = '<option value="">-- Alle Orte (Ort) --</option>';
 
         orts.forEach(ort => {
             const option = document.createElement('option');
@@ -75,7 +74,6 @@ async function loadOrtCategories() {
     };
 }
 
-// 4. Отрисовка таблицы с фильтрацией по Ort и поисковому запросу
 async function renderItems() {
     const selectedOrt = document.getElementById('ort-select').value;
     const searchQuery = document.getElementById('search-input').value.trim().toLowerCase();
@@ -90,12 +88,10 @@ async function renderItems() {
     request.onsuccess = () => {
         let items = request.result;
 
-        // Фильтрация по выбранной категории Ort
         if (selectedOrt) {
             items = items.filter(item => item.ort === selectedOrt);
         }
 
-        // Поиск по полям Sicherung, Systemnummer и Name
         if (searchQuery) {
             items = items.filter(item => {
                 const sicherung = (item.sicherung || '').toLowerCase();
@@ -109,59 +105,112 @@ async function renderItems() {
         }
 
         if (items.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" class="no-data">Keine Datensätze gefunden</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" class="no-data">Keine Einträge gefunden</td></tr>';
             return;
         }
 
-		items.forEach(item => {
-			const tr = document.createElement('tr');
-			tr.className = 'clickable-row';
-			tr.innerHTML = `
-				<td class="col-num">${item.nummer || '-'}</td>
-				<td class="col-sich">${item.sicherung || '-'}</td>
-				<td class="col-sys">${item.systemnummer || '-'}</td>
-				<td class="col-name">${item.name || '-'}</td>
-				<td class="col-ort">${item.ort || '-'}</td>
-			`;
-			tr.addEventListener('click', () => openModal(item));
-			tbody.appendChild(tr);
-		});
+        items.forEach(item => {
+            const tr = document.createElement('tr');
+            tr.className = 'clickable-row';
+            tr.innerHTML = `
+                <td class="col-num">${item.nummer || '-'}</td>
+                <td class="col-sich">${item.sicherung || '-'}</td>
+                <td class="col-sys">${item.systemnummer || '-'}</td>
+                <td class="col-name">${item.name || '-'}</td>
+                <td class="col-ort">${item.ort || '-'}</td>
+            `;
+            tr.addEventListener('click', () => openModal(item));
+            tbody.appendChild(tr);
+        });
     };
 }
 
-// 5. Показ деталей объекта в модальном окне
+let isEditMode = false; // Флаг текущего режима (просмотр или редактирование)
+let cachedItem = null;  // Кэш текущего открытого объекта
+
 function openModal(item) {
+    currentEditingId = item.id;
+    cachedItem = item;
+    isEditMode = false; // Всегда открываем в режиме просмотра
+
+    renderModalContent();
+    document.getElementById('item-modal').style.display = 'flex';
+}
+
+// Отрисовка содержимого модального окна в зависимости от режима
+function renderModalContent() {
+    const item = cachedItem;
     const detailsContainer = document.getElementById('modal-details');
     detailsContainer.innerHTML = '';
 
-    document.getElementById('modal-title').textContent = item.name || 'Stichdetails';
+    const existingSearchBtn = document.getElementById('modal-sys-search-btn');
+    if (existingSearchBtn) existingSearchBtn.remove();
 
-    Object.keys(item).forEach(key => {
-        if (key === 'id') return;
-        const val = item[key];
+    document.getElementById('modal-title').textContent = isEditMode 
+        ? `Bearbeiten: ${item.name || 'Objekt'}` 
+        : (item.name || 'Details');
 
-        // Пропускаем пустые значения
-        if (val !== undefined && val !== null && val.toString().trim() !== '' && val !== '-') {
-            const div = document.createElement('div');
-            div.className = 'info-group';
-            div.innerHTML = `<label>${key}</label><span>${val}</span>`;
-            detailsContainer.appendChild(div);
+    const keys = originalHeaders.length > 0 ? originalHeaders : Object.keys(item).filter(k => k !== 'id');
+
+    keys.forEach(key => {
+        const val = item[key] !== undefined ? item[key] : '';
+        const isEmpty = val.toString().trim() === '' || val === '-';
+
+        // В режиме просмотра пропускаем пустые поля
+        if (!isEditMode && isEmpty) return;
+
+        const div = document.createElement('div');
+        div.className = 'info-group';
+        div.innerHTML = `<label>${key}</label>`;
+
+        if (isEditMode) {
+            // РЕЖИМ РЕДАКТИРОВАНИЯ: показываем поля ввода (<input> или <textarea>)
+            const isLongField = ['kommentar', 'name', 'zusatzt', 'sicherung'].includes(key.toLowerCase()) || val.length > 30;
+
+            let inputElement;
+            if (isLongField) {
+                inputElement = document.createElement('textarea');
+                inputElement.value = val;
+                inputElement.setAttribute('data-key', key);
+                
+                setTimeout(() => {
+                    inputElement.style.height = 'auto';
+                    inputElement.style.height = (inputElement.scrollHeight + 4) + 'px';
+                }, 0);
+
+                inputElement.addEventListener('input', function() {
+                    this.style.height = 'auto';
+                    this.style.height = (this.scrollHeight + 4) + 'px';
+                });
+            } else {
+                inputElement = document.createElement('input');
+                inputElement.type = 'text';
+                inputElement.value = val;
+                inputElement.setAttribute('data-key', key);
+            }
+            div.appendChild(inputElement);
+        } else {
+            // РЕЖИМ ПРОСМОТРА: выводим только текст
+            const span = document.createElement('span');
+            span.className = 'info-value-view';
+            span.textContent = val;
+            div.appendChild(span);
         }
+
+        detailsContainer.appendChild(div);
     });
 
-    // Кнопка поиска аналогичных Systemnummer
-    if (item.systemnummer && item.systemnummer.trim() !== '') {
+    // Кнопка поиска по systemnummer отображается только в режиме просмотра
+    if (!isEditMode && item.systemnummer && item.systemnummer.trim() !== '') {
         const btnSearch = document.createElement('button');
-        btnSearch.className = 'btn-action btn-search';
-        btnSearch.style.marginTop = '15px';
-        btnSearch.style.width = '100%';
-        btnSearch.textContent = `🔍 Suchen Artikel mit Systemnummer: "${item.systemnummer}"`;
+        btnSearch.id = 'modal-sys-search-btn';
+        btnSearch.className = 'btn-modal-search';
+        btnSearch.textContent = `🔍 Alle Elemente mit Systemnr.: "${item.systemnummer}" finden`;
         
         btnSearch.addEventListener('click', () => {
             closeModal();
             document.getElementById('ort-select').value = '';
             
-            // Открываем поле поиска и вставляем туда systemnummer
             const searchContainer = document.getElementById('search-container');
             const searchInput = document.getElementById('search-input');
             searchContainer.style.display = 'block';
@@ -170,17 +219,149 @@ function openModal(item) {
             renderItems();
         });
 
-        detailsContainer.appendChild(btnSearch);
+        const modalContent = document.querySelector('.modal-content');
+        const modalButtons = document.querySelector('.modal-buttons');
+        modalContent.insertBefore(btnSearch, modalButtons);
     }
 
-    document.getElementById('item-modal').style.display = 'flex';
+    // Управление текстом и видимостью кнопок в панели
+    // Управление видимостью кнопок в панели модального окна
+    const btnEdit = document.getElementById('btn-edit');
+    const btnSave = document.getElementById('btn-save');
+
+    if (isEditMode) {
+        btnEdit.style.display = 'none';  // Скрываем «Bearbeiten»
+        btnSave.style.display = 'block'; // Показываем «Speichern»
+    } else {
+        btnEdit.style.display = 'block'; // Показываем «Bearbeiten»
+        btnSave.style.display = 'none';  // Скрываем «Speichern»
+    }
+}
+
+// Переключение в режим редактирования по кнопке "Bearbeiten"
+
+function toggleEditMode() {
+    isEditMode = true;
+    renderModalContent(); // Перерисовываем модальное окно в режиме инпутов
+}
+
+// Сохранение изменений в базу данных
+async function saveItemChanges() {
+    if (!currentEditingId || !cachedItem) {
+        alert('Fehler: Kein Datensatz ausgewählt.');
+        return;
+    }
+
+    // Собираем все заполненные/измененные данные из инпутов и текстовых полей
+    const inputs = document.querySelectorAll('#modal-details input, #modal-details textarea');
+    
+    // Начинаем с копии текущего кэша, чтобы не потерять скрытые или неизмененные ключи
+    const updatedData = { ...cachedItem };
+
+    inputs.forEach(input => {
+        const key = input.getAttribute('data-key');
+        if (key) {
+            updatedData[key] = input.value.trim();
+        }
+    });
+
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    
+    // Записываем обновленный объект обратно в IndexedDB
+    store.put(updatedData);
+
+    tx.oncomplete = async () => {
+        cachedItem = updatedData; // Обновляем кэш
+        isEditMode = false;       // Возвращаем режим просмотра
+        renderModalContent();     // Перерисовываем модальное окно обратно в текст
+        await loadOrtCategories();
+        await renderItems();      // Обновляем главную таблицу
+        
+        alert('Änderungen erfolgreich gespeichert!');
+    };
+
+    tx.onerror = (event) => {
+        console.error('Fehler beim Speichern:', event.target.error);
+        alert('Fehler beim Speichern der Daten.');
+    };
 }
 
 function closeModal() {
     document.getElementById('item-modal').style.display = 'none';
+    currentEditingId = null;
+    cachedItem = null;
+    isEditMode = false;
+    
+    // Возвращаем исходное состояние кнопок
+    const btnEdit = document.getElementById('btn-edit');
+    const btnSave = document.getElementById('btn-save');
+    if (btnEdit) btnEdit.style.display = 'block';
+    if (btnSave) btnSave.style.display = 'none';
 }
 
-// 6. Обработка файла
+async function exportDatabase() {
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const store = tx.objectStore(STORE_NAME);
+    const request = store.getAll();
+
+    request.onsuccess = async () => {
+        const items = request.result;
+        if (items.length === 0) {
+            alert('Die Datenbank ist leer. Es gibt nichts zu exportieren.');
+            return;
+        }
+
+        const keys = originalHeaders.length > 0 ? originalHeaders : Object.keys(items[0]).filter(k => k !== 'id');
+        
+        let fileContent = keys.join('\t') + '\n';
+
+        items.forEach(item => {
+            const row = keys.map(key => item[key] !== undefined ? item[key] : '');
+            fileContent += row.join('\t') + '\n';
+        });
+
+        // Формируем имя файла с датой и временем
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        
+        const filename = `equipment_${year}-${month}-${day}_${hours}-${minutes}.txt`;
+
+        const blob = new Blob([fileContent], { type: 'text/plain;charset=utf-8' });
+        const file = new File([blob], filename, { type: 'text/plain' });
+
+        // Проверяем, поддерживает ли устройство нативный системный диалог «Поделиться» (Web Share API)
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            try {
+                await navigator.share({
+                    title: 'Anlagendatenbank Export',
+                    text: 'Aktuelle Exportdatei der Anlagendatenbank.',
+                    files: [file]
+                });
+                return; // Успешно передано в системное меню «Поделиться»
+            } catch (error) {
+                // Если пользователь отменил отправку, просто выходим
+                if (error.name === 'AbortError') return;
+                console.log('Share API fehlgeschlagen, fallback auf Download...', error);
+            }
+        }
+
+        // Запасной вариант (Fallback): если Web Share API не поддерживается, файл скачивается стандартным способом
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
+}
+
 document.getElementById('file-input').addEventListener('change', function(event) {
     const file = event.target.files[0];
     if (!file) return;
@@ -192,7 +373,7 @@ document.getElementById('file-input').addEventListener('change', function(event)
             const parsedItems = parseTextData(textContent);
 
             if (parsedItems.length === 0) {
-                alert('Fehler beim Lesen der Daten aus der Datei.');
+                alert('Fehler: Die Datei ist leer oder ungültig.');
                 return;
             }
 
@@ -203,12 +384,12 @@ document.getElementById('file-input').addEventListener('change', function(event)
             parsedItems.forEach(item => store.add(item));
 
             tx.oncomplete = async () => {
-                alert('Die Daten wurden erfolgreich importiert!');
+                alert('Daten erfolgreich importiert!');
                 await loadOrtCategories();
                 await renderItems();
             };
         } catch (err) {
-            alert('Fehler beim Parsen der Datei.');
+            alert('Fehler beim Verarbeiten der Datei.');
             console.error(err);
         }
     };
@@ -216,13 +397,11 @@ document.getElementById('file-input').addEventListener('change', function(event)
     reader.readAsText(file, 'UTF-8');
 });
 
-// Инициализация
 document.addEventListener('DOMContentLoaded', async () => {
     await initDB();
     await loadOrtCategories();
     await renderItems();
 
-    // Переключение видимости поля поиска по кнопке "Искать"
     document.getElementById('toggle-search-btn').addEventListener('click', () => {
         const searchContainer = document.getElementById('search-container');
         const searchInput = document.getElementById('search-input');
@@ -235,6 +414,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             searchContainer.style.display = 'block';
             searchInput.focus();
         }
+    });
+
+    document.getElementById('ort-select').addEventListener('change', renderItems);
+    document.getElementById('search-input').addEventListener('input', renderItems);
+});
     });
 
     // Слушатели фильтра и поиска
