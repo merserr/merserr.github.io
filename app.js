@@ -367,9 +367,23 @@ document.getElementById('file-input').addEventListener('change', function(event)
     if (!file) return;
 
     const reader = new FileReader();
+    
+    // Читаем файл как бинарный буфер, чтобы избежать проблем с кодировками на GitHub Pages
     reader.onload = async function(e) {
         try {
-            const textContent = e.target.result;
+            const buffer = e.target.result;
+            let textContent;
+
+            // Сначала пробуем стандартный UTF-8
+            try {
+                const utf8Decoder = new TextDecoder('utf-8', { fatal: true });
+                textContent = utf8Decoder.decode(buffer);
+            } catch (err) {
+                // Если не получилось (например, файл из Windows), читаем в кодировке Windows-1252 (для немецкого языка)
+                const winDecoder = new TextDecoder('windows-1252');
+                textContent = winDecoder.decode(buffer);
+            }
+
             const parsedItems = parseTextData(textContent);
 
             if (parsedItems.length === 0) {
@@ -387,14 +401,21 @@ document.getElementById('file-input').addEventListener('change', function(event)
                 alert('Daten erfolgreich importiert!');
                 await loadOrtCategories();
                 await renderItems();
+                
+                // Сбрасываем значение инпута, чтобы можно было повторно загрузить тот же файл
+                event.target.value = '';
             };
         } catch (err) {
             alert('Fehler beim Verarbeiten der Datei.');
-            console.error(err);
+            console.error('Import-Fehler:', err);
         }
     };
 
-    reader.readAsText(file, 'UTF-8');
+    reader.onerror = function() {
+        alert('Fehler beim Lesen der Datei.');
+    };
+
+    reader.readAsArrayBuffer(file);
 });
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -416,12 +437,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    document.getElementById('ort-select').addEventListener('change', renderItems);
-    document.getElementById('search-input').addEventListener('input', renderItems);
-});
-    });
-
-    // Слушатели фильтра и поиска
     document.getElementById('ort-select').addEventListener('change', renderItems);
     document.getElementById('search-input').addEventListener('input', renderItems);
 });
