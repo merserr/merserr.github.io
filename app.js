@@ -8,7 +8,7 @@ let originalHeaders = [];
 
 function initDB() {
     return new Promise((resolve, reject) => {
-        const request = indexedDB.open(DB_, DB_VERSION);
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
 
         request.onupgradeneeded = (event) => {
             db = event.target.result;
