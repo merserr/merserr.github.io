@@ -94,11 +94,11 @@ async function renderItems() {
 
         if (searchQuery) {
             items = items.filter(item => {
-                const beschriftung = (item.beschriftung || '').toLowerCase();
+                const sicherung = (item.sicherung || '').toLowerCase();
                 const systemnummer = (item.systemnummer || '').toLowerCase();
                 const name = (item.name || '').toLowerCase();
 
-                return beschriftung.includes(searchQuery) || 
+                return sicherung.includes(searchQuery) || 
                        systemnummer.includes(searchQuery) || 
                        name.includes(searchQuery);
             });
@@ -114,7 +114,7 @@ async function renderItems() {
             tr.className = 'clickable-row';
             tr.innerHTML = `
                 <td class="col-num">${item.nummer || '-'}</td>
-                <td class="col-beschriftung">${item.beschriftung || '-'}</td>
+                <td class="col-sich">${item.sicherung || '-'}</td>
                 <td class="col-sys">${item.systemnummer || '-'}</td>
                 <td class="col-name">${item.name || '-'}</td>
                 <td class="col-ort">${item.ort || '-'}</td>
@@ -165,7 +165,7 @@ function renderModalContent() {
 
         if (isEditMode) {
             // РЕЖИМ РЕДАКТИРОВАНИЯ: показываем поля ввода (<input> или <textarea>)
-            const isLongField = ['kommentar', 'name', 'zusatztlich', 'beschriftung'].includes(key.toLowerCase()) || val.length > 30;
+            const isLongField = ['kommentar', 'name', 'zusatzt', 'sicherung'].includes(key.toLowerCase()) || val.length > 30;
 
             let inputElement;
             if (isLongField) {
