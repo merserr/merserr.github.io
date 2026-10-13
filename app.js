@@ -8,7 +8,7 @@ let originalHeaders = [];
 
 function initDB() {
     return new Promise((resolve, reject) => {
-        const request = indexedDB.open(DB_NAME, DB_VERSION);
+        const request = indexedDB.open(DB_, DB_VERSION);
 
         request.onupgradeneeded = (event) => {
             db = event.target.result;
@@ -94,11 +94,11 @@ async function renderItems() {
 
         if (searchQuery) {
             items = items.filter(item => {
-                const sicherung = (item.sicherung || '').toLowerCase();
+                const beschreibung = (item.beschreibung || '').toLowerCase();
                 const systemnummer = (item.systemnummer || '').toLowerCase();
                 const name = (item.name || '').toLowerCase();
 
-                return sicherung.includes(searchQuery) || 
+                return beschreibung.includes(searchQuery) || 
                        systemnummer.includes(searchQuery) || 
                        name.includes(searchQuery);
             });
@@ -165,7 +165,7 @@ function renderModalContent() {
 
         if (isEditMode) {
             // РЕЖИМ РЕДАКТИРОВАНИЯ: показываем поля ввода (<input> или <textarea>)
-            const isLongField = ['kommentar', 'name', 'zusatzt', 'sicherung'].includes(key.toLowerCase()) || val.length > 30;
+            const isLongField = ['kommentar', 'name', 'zusatzt', 'beschreibung'].includes(key.toLowerCase()) || val.length > 30;
 
             let inputElement;
             if (isLongField) {
