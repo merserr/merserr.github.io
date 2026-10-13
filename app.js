@@ -114,7 +114,7 @@ async function renderItems() {
             tr.className = 'clickable-row';
             tr.innerHTML = `
                 <td class="col-num">${item.nummer || '-'}</td>
-                <td class="col-sich">${item.sicherung || '-'}</td>
+                <td class="col-beschriftung">${item.beschriftung || '-'}</td>
                 <td class="col-sys">${item.systemnummer || '-'}</td>
                 <td class="col-name">${item.name || '-'}</td>
                 <td class="col-ort">${item.ort || '-'}</td>
