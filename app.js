@@ -165,7 +165,7 @@ function renderModalContent() {
 
         if (isEditMode) {
             // РЕЖИМ РЕДАКТИРОВАНИЯ: показываем поля ввода (<input> или <textarea>)
-            const isLongField = ['kommentar', 'name', 'zusätztlich', 'beschriftung'].includes(key.toLowerCase()) || val.length > 30;
+            const isLongField = ['kommentar', 'name', 'zusatztlich', 'beschriftung'].includes(key.toLowerCase()) || val.length > 30;
 
             let inputElement;
             if (isLongField) {
